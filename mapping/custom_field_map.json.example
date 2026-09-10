@@ -1,0 +1,4 @@
+{
+  "_comment": "Zendesk custom field id -> Chatwoot conversation custom attribute name. Copy to custom_field_map.json.",
+  "111111": "category"
+}

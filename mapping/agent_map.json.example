@@ -1,0 +1,4 @@
+{
+  "_comment": "Map Zendesk agent user id -> Chatwoot agent id. Copy to agent_map.json and fill in. Optional.",
+  "10001": 1
+}
