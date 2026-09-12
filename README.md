@@ -6,6 +6,14 @@ Chatwoot.
 Pipeline: **export → transform → import → SQL timestamp fixup**, plus verify
 and a live-ticket cutover report.
 
+This is **not** extensively tested software. It was used to migrate **5000+**
+Zendesk tickets (including attachments) into self-hosted Chatwoot, but the
+unit tests are narrow and there is no broad compatibility matrix. Use it at
+your own risk: take a Chatwoot database backup first, run `--dry-run` and
+**small batches** (`--limit`) before a full import, and verify a sample of
+those tickets in Chatwoot (status, direction, attachments, timestamps after
+fixup) before continuing.
+
 ## Status
 
 | Stage | Module | State |
