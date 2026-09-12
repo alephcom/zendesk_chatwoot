@@ -16,6 +16,7 @@ and a live-ticket cutover report.
 | Timestamp fixup (SQL) | `zdmigrate/fixup.py` | built (`display_id` + `account_id`) |
 | Verify | `zdmigrate/verify.py` | built |
 | Live tickets | `zdmigrate/live_tickets.py` | built, read-only |
+| Repoint to Email inbox | `zdmigrate/repoint.py` | built (SQL; `CHATWOOT_EMAIL_INBOX_ID`) |
 
 Help Center / Guide articles are **not** in this pipeline.
 
@@ -77,12 +78,15 @@ python -m unittest discover tests
 
 ## Status mapping (Zendesk → Chatwoot)
 
-| Zendesk | Conceptual Chatwoot | Sent on conversation **create** |
-|---------|---------------------|----------------------------------|
-| new, open | open | open |
-| pending | pending | pending |
-| hold (On-hold) | snoozed | **pending** (create enum has no snoozed) |
-| solved, closed | resolved | resolved |
+| Zendesk | Conceptual Chatwoot | Sent on conversation **create** | Restored after messages |
+|---------|---------------------|----------------------------------|-------------------------|
+| new, open | open | open | (left open) |
+| pending | pending | pending | pending |
+| hold (On-hold) | snoozed | **pending** (create enum has no snoozed) | pending |
+| solved, closed | resolved | resolved | resolved (`toggle_status`) |
+
+Chatwoot reopens a conversation when an incoming message is posted, so solved
+and closed tickets are **resolved again** after the comment thread is imported.
 
 ## Import into Chatwoot
 
@@ -137,6 +141,9 @@ python -m zdmigrate.verify
 python -m zdmigrate.fixup
 psql "$CHATWOOT_DATABASE_URL" -1 -f storage/state/timestamp_fixup.sql
 
+python -m zdmigrate.repoint
+psql "$CHATWOOT_DATABASE_URL" -1 -f storage/state/repoint_inbox.sql
+
 python -m zdmigrate.live_tickets
 ```
 
@@ -148,7 +155,31 @@ to the latest message time.
 
 Merged Zendesk tickets get a private note and a `zendesk-merged` label.
 
+### Move conversations onto the Email inbox
+
+Import must stay on the **API** inbox (`CHATWOOT_INBOX_ID`) so historical agent
+replies are not emailed. After import + timestamp fixup, set
+`CHATWOOT_EMAIL_INBOX_ID` to the live Email channel id (Settings → Inboxes, or
+the inbox URL) and run:
+
+```bash
+python -m zdmigrate.repoint
+psql "$CHATWOOT_DATABASE_URL" -1 -f storage/state/repoint_inbox.sql
+```
+
+The Chatwoot API cannot change `inbox_id`; the command writes SQL that
+creates Email `contact_inboxes` (source_id = contact email), then updates
+`conversations` and `messages`. It only touches **completed** imports still on
+the API inbox. Contacts without an email are left on the API inbox.
+
+Replies in the Email inbox **send real customer email**. Keep Sidekiq paused
+until you want that. Agents must be members of the Email inbox.
+
+`$CHATWOOT_DATABASE_URL` is Chatwoot's Postgres URL (from Chatwoot's `.env`
+`POSTGRES_*` vars), not this repo's `.env`. Example:
+`postgres://chatwoot:PASSWORD@127.0.0.1:5432/chatwoot`.
+
 ## Still separate
 
-- Channel repointing (live email, chat widget) after cutover.
+- Live inbound email / chat widget cutover (DNS, forwarding, Zendesk address).
 - Help Center / Guide articles.

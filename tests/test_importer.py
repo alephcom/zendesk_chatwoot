@@ -13,6 +13,7 @@ from zdmigrate.importer import (
     load_agent_map,
     load_import_progress,
     resolve_assignee_id,
+    ticket_create_status,
 )
 from zdmigrate.transform import map_create_status
 
@@ -66,6 +67,12 @@ class TestConversationPayload(unittest.TestCase):
     def test_hold_coerced_to_pending(self):
         p = build_conversation_payload(self._ticket(status="hold"), 5, "a@b.c", 7)
         self.assertEqual(p["status"], "pending")
+
+    def test_ticket_create_status(self):
+        self.assertEqual(ticket_create_status(self._ticket(status="solved")), "resolved")
+        self.assertEqual(ticket_create_status(self._ticket(status="closed")), "resolved")
+        self.assertEqual(ticket_create_status(self._ticket(status="open")), "open")
+        self.assertEqual(ticket_create_status(self._ticket(status="pending")), "pending")
 
 
 class TestProgressAndMap(unittest.TestCase):

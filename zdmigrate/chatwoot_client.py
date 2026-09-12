@@ -116,6 +116,14 @@ class ChatwootClient:
     def add_labels(self, conversation_id: int, labels: list[str]) -> dict:
         return self._json("POST", f"conversations/{conversation_id}/labels", json={"labels": labels})
 
+    def toggle_status(self, conversation_id: int, status: str) -> dict:
+        """Set conversation status. Incoming messages reopen resolved tickets."""
+        return self._json(
+            "POST",
+            f"conversations/{conversation_id}/toggle_status",
+            json={"status": status},
+        )
+
     def find_conversation_by_zendesk_id(self, zendesk_ticket_id: int) -> Optional[dict]:
         """Best-effort lookup; Chatwoot may not filter additional_attributes."""
         payload = {

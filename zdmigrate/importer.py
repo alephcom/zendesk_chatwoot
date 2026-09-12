@@ -15,7 +15,8 @@ What it does per ticket (idempotent — safe to re-run):
   3. create each cleaned message (skips boilerplate-only), uploading attachments
      then rehosted inline images on the same message
   4. apply tags as labels; private note if the Zendesk ticket was merged
-  5. record Chatwoot display ids + original Zendesk timestamps for SQL backdating
+  5. restore pending/resolved status (Chatwoot reopens on incoming messages)
+  6. record Chatwoot display ids + original Zendesk timestamps for SQL backdating
 
 Run:
   python -m zdmigrate.importer --dry-run   # counts only; no Chatwoot writes
@@ -59,13 +60,18 @@ def build_conversation_payload(
         "source_id": source_id,
         "inbox_id": inbox_id,
         "contact_id": contact_id,
-        "status": map_create_status(map_status(ticket.get("status", ""))),
+        "status": ticket_create_status(ticket),
         "additional_attributes": add_attrs,
     }
     custom = map_custom_fields(ticket.get("custom_fields", []), field_map)
     if custom:
         payload["custom_attributes"] = custom
     return payload
+
+
+def ticket_create_status(ticket: dict) -> str:
+    """Chatwoot create/toggle status for this Zendesk ticket (open/pending/resolved)."""
+    return map_create_status(map_status(ticket.get("status", "")))
 
 
 def load_import_progress(path: Path) -> dict[int, dict]:
@@ -371,6 +377,15 @@ def _import_ticket(
             client.add_labels(conv_id, labels)
         except Exception as exc:  # noqa: BLE001
             log.warn(f"Ticket {tid}: label apply failed: {exc}")
+
+    # Incoming messages reopen resolved/pending conversations; restore after
+    # the thread is fully written.
+    cw_status = ticket_create_status(ticket)
+    if cw_status != "open":
+        try:
+            client.toggle_status(conv_id, cw_status)
+        except Exception as exc:  # noqa: BLE001
+            log.warn(f"Ticket {tid}: status restore to {cw_status} failed: {exc}")
 
     rec = {
         "zendesk_ticket_id": tid,

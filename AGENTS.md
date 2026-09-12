@@ -33,12 +33,14 @@ zdmigrate/
   export.py           stages: inventory | tickets | content (resumable)
   importer.py         creates CW contacts/conversations/messages (idempotent)
   fixup.py            emits SQL to backdate created_at in Postgres
+  repoint.py          emits SQL to move imported convos onto Email inbox
   verify.py           exported vs imported reconcile
   live_tickets.py     read-only non-closed ticket report
 tests/
   test_transform.py   quote/inline/direction/status fixtures
   test_importer.py    payload builders + status coercion + dry-run
   test_fixup.py       display_id SQL + last_activity_at
+  test_repoint.py     API→Email inbox SQL
   test_verify.py      mismatch comparison
   test_live_tickets.py
 mapping/agent_map.json.example
@@ -66,6 +68,8 @@ storage/ ──importer──> Chatwoot (contacts, conversations, messages, labe
                         + state/timestamps.jsonl (kind,id,created_at)
 
 state/timestamps.jsonl ──fixup──> state/timestamp_fixup.sql ──psql──> Postgres
+state/imported.jsonl   ──repoint──> state/repoint_inbox.sql ──psql──> Postgres
+                        (API inbox → CHATWOOT_EMAIL_INBOX_ID)
 ```
 
 ---
@@ -78,7 +82,8 @@ silently reintroduces real bugs.
 - **Import target must be an API-type Chatwoot inbox.** Creating outgoing (agent)
   messages in an **Email** inbox makes Chatwoot send real emails to customers.
   Prefer one inbox; product/line can be preserved via custom attributes + tags,
-  not separate inboxes.
+  not separate inboxes. After import, `repoint.py` moves completed conversations
+  onto `CHATWOOT_EMAIL_INBOX_ID` via SQL (the API cannot change `inbox_id`).
 - **Timestamps can't be set via the API** (server stamps "now"). They are fixed
   afterward by `fixup.py` → SQL `UPDATE` on `messages.created_at` /
   `conversations.created_at`. Keep recording `state/timestamps.jsonl` during
@@ -121,6 +126,9 @@ silently reintroduces real bugs.
 - `POST conversations/{id}/messages` — `content`, `message_type`
   (incoming|outgoing), `private`; multipart `attachments[]` for files
 - `POST conversations/{id}/labels` — `{labels:[...]}`
+- `POST conversations/{id}/toggle_status` — `{status}` after messages;
+  incoming comments reopen resolved conversations, so solved/closed Zendesk
+  tickets must be resolved again at the end of each ticket import
 
 Docs index: https://developers.chatwoot.com/llms.txt (fetch specific pages as
 needed; prefer the **application** API, not the public one).
